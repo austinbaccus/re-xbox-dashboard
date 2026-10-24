@@ -385,7 +385,7 @@ char g_jellyfinClientId[64]  = "";
 char g_jellyfinUserName[128] = "";
 int g_startupMode = 0;      // 0 = ask, 1 = dashboard, 2 = development
 bool g_bUseOnScreenKeyboard = false;  // when true, ignore physical keyboard during keyboard popups
-bool g_bShowBootAnimation   = true;   // play xbox_boot.mp4 once at startup before the dashboard
+bool g_bShowBootAnimation   = true;   // play the boot animation once at startup before the dashboard
 
 // Legacy [Progressive] / [Dashboard Settings] sections, round-tripped through
 // desktop.ini so the truncate-rewrite save doesn't drop them.
@@ -1816,11 +1816,12 @@ int main(int argc, char* argv[]) {
         : "UIX Desktop");
 
     // Cold-boot animation. Plays once before dashboard init mirrors what the
-    // original Xbox does on power-on. Skipped in dev mode (the dashboard
-    // isn't the focus there) and toggleable via Settings > Show Boot Animation.
+    // original Xbox does on power-on: the reverse engineered animation from
+    // third-party/xboot, rendered live, then straight into the dashboard.
+    // Skipped in dev mode (the dashboard isn't the focus there) and
+    // toggleable via Settings > Show Boot Animation.
     if (g_bShowBootAnimation && !g_extractedMode) {
-        BootAnim_PlayAndWait(g_pSDLWindow,
-            AppPath("Configs/xbox_boot.mp4"));
+        BootAnim_PlayAndWait(g_pSDLWindow);
     }
 
     // Initialize app globals

@@ -39,8 +39,11 @@ Used by the desktop port:
 | [ImGuiColorTextEdit](https://github.com/BalazsJako/ImGuiColorTextEdit) | MIT | XAP script editor with syntax highlighting |
 | [stb_image](https://github.com/nothings/stb) | Public Domain (or MIT, dual-licensed) | Image loading on the desktop side |
 | [GLEW](https://glew.sourceforge.net/) | Modified BSD / MIT | OpenGL extension loader (Windows desktop build only) |
+| [re-xbox-boot](https://github.com/austinbaccus/re-xbox-boot) (`theseus/third-party/xboot`) | MIT | The boot animation, reconstructed from the BIOS: portable C core, renderer ported to bgfx in `boot_anim.cpp` and `shaders/xboot/` |
 
 All of the above are GPL-3.0-compatible, either by being permissive (MIT, BSD, zlib, public domain) or by being LGPL (linkable from GPL).
+
+The boot animation's data pack is built from `theseus/third-party/xboot/data/`, geometry, samples and tables extracted from the original BIOS. As that repository notes, their content is Microsoft's work; the boot animation itself was created by Pipeworks Software in 2001.
 
 ## Xbox Dashboard Assets (`xboxfs/`)
 

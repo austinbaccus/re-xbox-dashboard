@@ -1,12 +1,13 @@
-// boot_anim.h: one-shot fullscreen boot animation playback. Call once at
-// app startup before the dashboard initializes. Blocks until the video ends
-// or the user presses Esc/Enter/Space.
+// boot_anim.h: the original Xbox boot animation, rendered live before the
+// dashboard starts. Call once at app startup before the dashboard
+// initializes. Blocks until the animation ends or the user skips it.
 
 #pragma once
 
 struct SDL_Window;
 
-// Plays the boot animation video at `path` fullscreen via libmpv. Blocks
-// until END_FILE or a skip key. Returns true if anything was rendered;
-// false if the video could not be opened (caller should just move on).
-bool BootAnim_PlayAndWait(SDL_Window* win, const char* path);
+// Runs the reverse engineered boot animation (third-party/xboot) through
+// bgfx, with its own synthesized sound. Blocks until the animation ends
+// (t = 8 s) or a skip key / controller button. Returns true if anything
+// was rendered; false if it could not start (caller should just move on).
+bool BootAnim_PlayAndWait(SDL_Window* win);

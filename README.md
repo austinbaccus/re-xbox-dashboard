@@ -81,6 +81,7 @@ A drop-in replacement for the stock Xbox dashboard on modded consoles. Same look
 
 The Theseus engine compiled for your computer, with the modern features bolted on. macOS, Linux, Windows, Steam Deck friendly.
 
+- **The original boot animation**, rendered live from the [reverse engineered BIOS animation](https://github.com/austinbaccus/re-xbox-boot) with its synthesized sound, then straight into the dashboard (Settings > Show Boot Animation; Esc, Enter, Space or A/B/Start skips it)
 - **3D launcher** for native PC games, Steam libraries, RetroArch ROMs, and Xbox ISOs via [xemu](https://xemu.app)
 - **xCloud / Game Pass streaming** signs in with your Xbox account and drops your whole cloud library into the games grid, box art and all. Remote play for your own console shows up under "Your Xbox"
 - **Media library** that scans your Movies and TV folders, pulls posters from [TMDB](https://www.themoviedb.org/), and plays back through libmpv. [Plex](https://www.plex.tv/) and [Jellyfin](https://jellyfin.org/) servers browse and stream in the same UI (Jellyfin signs in with Quick Connect)

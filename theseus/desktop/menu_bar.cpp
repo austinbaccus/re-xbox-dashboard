@@ -624,7 +624,7 @@ void RenderSettingsWindow() {
             ImGui::SameLine();
             ImGui::TextDisabled("(?)");
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Plays the original Xbox boot animation once on app startup\nbefore the dashboard initializes. Press Esc/Enter/Space to skip.");
+                ImGui::SetTooltip("Plays the original Xbox boot animation once on app startup\nbefore the dashboard initializes. Press Esc/Enter/Space or A/B/Start to skip.");
 
             ImGui::Spacing();
             if (ImGui::Button("Save All Settings"))
