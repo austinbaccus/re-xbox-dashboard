@@ -1893,6 +1893,13 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // InitApp's InitD3D sets the view size to a 1280x720 placeholder. Put
+    // it back to the real drawable now, or the projection keeps 16:9 until
+    // the next resize event: a 21:9 or 32:9 window (fullscreen especially,
+    // which sends none) showed the dashboard stretched until it was
+    // minimized and restored.
+    BgfxApplyReset();
+
     // ES-DE import runs here, not before the window: it walks the rom tree,
     // which on a network share with a cold cache is slow, and doing it any
     // earlier means staring at no window at all. The launcher reads VGames

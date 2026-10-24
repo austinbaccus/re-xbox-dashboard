@@ -822,7 +822,14 @@ void CleanupApp()
 
 void Advance()
 {
-	XTIME now = (float)GetTickCount() / 1000.0f;
+	// Seconds since the process started, from the high resolution counter.
+	// This was GetTickCount() / 1000 through a float: on Windows that is
+	// system uptime with a 15.6 ms tick, and a float of it loses the
+	// fraction as uptime grows (steps of 1/16 s after a week, 1/8 s after
+	// two), so animation advanced in coarse, uneven jumps however fast
+	// frames were drawn.
+	static const Uint64 s_t0 = SDL_GetPerformanceCounter();
+	XTIME now = (XTIME)(SDL_GetPerformanceCounter() - s_t0) / (XTIME)SDL_GetPerformanceFrequency();
 	float nDelta = (float)(now - g_now);
 	if (nDelta == 0.0f)
 		nDelta = 0.001f;
