@@ -772,6 +772,41 @@ DESKTOP_ALL_SRCS = \
 	$(DESKTOP_SRCS_IMGUI)
 
 DESKTOP_OBJS = $(patsubst $(THESEUS_SRC)/%.cpp,$(DESKTOP_DIR)/%.o,$(DESKTOP_ALL_SRCS))
+
+# ------------------------------------------------------------------------
+# Boot animation core (third-party/xboot, the re-xbox-boot repo). Portable
+# C99, compiled with the flags its own build uses (core/build.py) so the
+# numerics stay as the boot repo measured them. Its data pack is built from
+# the repo's data/ by its own tools/pack/pack.py (checked against the
+# SHA-256 it ships) and embedded into the binary as a header, so there is
+# no runtime file to lose. Every desktop target below links these objects;
+# boot_anim.cpp is the only C++ user.
+# ------------------------------------------------------------------------
+XBOOT_ROOT   := $(THESEUS_SRC)/third-party/xboot
+XBOOT_C_SRCS := $(sort $(wildcard $(XBOOT_ROOT)/core/src/*.c))
+XBOOT_PAK    := $(XBOOT_ROOT)/out/pack/xboot.pak
+XBOOT_PAK_H  := $(XBOOT_ROOT)/out/xboot_pak.h
+XBOOT_INC    := -I$(XBOOT_ROOT)/core/include -I$(XBOOT_ROOT)/out
+XBOOT_CFLAGS := -std=c99 $(if $(DEBUG),-g -O0,-O2) -MMD -MP \
+                -ffp-contract=off -fno-fast-math -fno-math-errno \
+                -I$(XBOOT_ROOT)/core/include -I$(XBOOT_ROOT)/core/src
+PYTHON       ?= python3
+
+$(XBOOT_ROOT)/core/include/xboot.h:
+	@echo "xboot submodule not initialized; running git submodule update..."
+	cd $(THESEUS_SRC)/.. && git submodule update --init --depth 1 theseus/third-party/xboot
+
+$(XBOOT_PAK_H): $(XBOOT_ROOT)/core/include/xboot.h $(THESEUS_SRC)/../build/embed_xboot_pak.py
+	$(PYTHON) $(XBOOT_ROOT)/tools/pack/pack.py --check
+	$(PYTHON) $(THESEUS_SRC)/../build/embed_xboot_pak.py $(XBOOT_PAK) $@
+
+DESKTOP_CFLAGS += $(XBOOT_INC)
+DESKTOP_OBJS   += $(patsubst $(XBOOT_ROOT)/core/src/%.c,$(DESKTOP_DIR)/xboot/%.o,$(XBOOT_C_SRCS))
+$(DESKTOP_DIR)/desktop/boot_anim.o: $(XBOOT_PAK_H)
+$(DESKTOP_DIR)/xboot/%.o: $(XBOOT_ROOT)/core/src/%.c
+	@mkdir -p $(dir $@)
+	$(DESKTOP_CC) $(XBOOT_CFLAGS) -c -o $@ $<
+
 DESKTOP_DEPS = $(DESKTOP_OBJS:.o=.d)
 -include $(DESKTOP_DEPS)
 
@@ -913,6 +948,38 @@ shaders-bgfx-dx11:
 	done
 	@echo "=== bgfx shaders compiled to $(SHADERS_OUT_DIR)/dx11/ ==="
 
+
+# The boot animation's shaders (theseus/desktop/shaders/xboot/, see
+# boot_anim.cpp) have a varying.def.sc of their own and land next to the
+# others as Data/shaders/<backend>/xboot_<name>.bin. Same tools and
+# profiles as above; dx11 again only on Windows (fxc).
+#   make -C build shaders-xboot          metal, spirv, glsl, essl
+#   make -C build shaders-xboot-dx11     dx11, on Windows
+XBOOT_SHADERS_DIR := $(SHADERS_SRC_DIR)/xboot
+# $(call xboot-shaders,<subdir>,<platform>,<profile>)
+define xboot-shaders
+	@mkdir -p $(SHADERS_OUT_DIR)/$(1)
+	@for SC in $(XBOOT_SHADERS_DIR)/vs_*.sc $(XBOOT_SHADERS_DIR)/fs_*.sc; do \
+		NAME=$$(basename $$SC .sc); \
+		case $$NAME in vs_*) T=v ;; *) T=f ;; esac; \
+		echo "shaderc [$(1)] xboot_$$NAME"; \
+		$(SHADERC) -f $$SC -o $(SHADERS_OUT_DIR)/$(1)/xboot_$$NAME.bin \
+			--type $$T --platform $(2) --profile $(3) \
+			--varyingdef $(XBOOT_SHADERS_DIR)/varying.def.sc \
+			-i $(BGFX_SHADER_INC) -i $(XBOOT_SHADERS_DIR) \
+			|| exit 1; \
+	done
+endef
+
+.PHONY: shaders-xboot shaders-xboot-dx11
+shaders-xboot:
+	$(call xboot-shaders,metal,osx,metal)
+	$(call xboot-shaders,spirv,windows,spirv)
+	$(call xboot-shaders,glsl,linux,150)
+	$(call xboot-shaders,essl,android,300_es)
+
+shaders-xboot-dx11:
+	$(call xboot-shaders,dx11,windows,s_5_0)
 
 desktop: projectm-deps $(DESKTOP_TARGET)
 	@echo "=== desktop build complete: $(DESKTOP_TARGET) ==="
@@ -1195,6 +1262,16 @@ WIN64_SRCS += $(THESEUS_SRC)/desktop/imgui_impl_bgfx.cpp
 
 # Same source list as desktop. the compiler reads the same files.
 WIN64_OBJS = $(patsubst $(THESEUS_SRC)/%.cpp,$(WIN64_DIR)/%.o,$(WIN64_SRCS))
+
+# The boot animation's core, as for the native desktop target.
+WIN64_CC      = x86_64-w64-mingw32-gcc
+WIN64_CFLAGS += $(XBOOT_INC)
+WIN64_OBJS   += $(patsubst $(XBOOT_ROOT)/core/src/%.c,$(WIN64_DIR)/xboot/%.o,$(XBOOT_C_SRCS))
+$(WIN64_DIR)/desktop/boot_anim.o: $(XBOOT_PAK_H)
+$(WIN64_DIR)/xboot/%.o: $(XBOOT_ROOT)/core/src/%.c
+	@mkdir -p $(dir $@)
+	$(WIN64_CC) $(XBOOT_CFLAGS) -c -o $@ $<
+
 WIN64_DEPS = $(WIN64_OBJS:.o=.d)
 -include $(WIN64_DEPS)
 
@@ -1395,6 +1472,16 @@ LINUX_ARM64_LDFLAGS = \
 
 # Same source list as desktop. the compiler reads the same files.
 LINUX_ARM64_OBJS = $(patsubst $(THESEUS_SRC)/%.cpp,$(LINUX_ARM64_DIR)/%.o,$(DESKTOP_ALL_SRCS))
+
+# The boot animation's core, as for the native desktop target.
+LINUX_ARM64_CC      = aarch64-linux-gnu-gcc
+LINUX_ARM64_CFLAGS += $(XBOOT_INC)
+LINUX_ARM64_OBJS   += $(patsubst $(XBOOT_ROOT)/core/src/%.c,$(LINUX_ARM64_DIR)/xboot/%.o,$(XBOOT_C_SRCS))
+$(LINUX_ARM64_DIR)/desktop/boot_anim.o: $(XBOOT_PAK_H)
+$(LINUX_ARM64_DIR)/xboot/%.o: $(XBOOT_ROOT)/core/src/%.c
+	@mkdir -p $(dir $@)
+	$(LINUX_ARM64_CC) $(XBOOT_CFLAGS) -c -o $@ $<
+
 LINUX_ARM64_DEPS = $(LINUX_ARM64_OBJS:.o=.d)
 -include $(LINUX_ARM64_DEPS)
 

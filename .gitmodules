@@ -15,3 +15,7 @@
 	path = theseus/third-party/libdatachannel
 	url = https://github.com/paullouisageneau/libdatachannel.git
 	ignore = untracked
+[submodule "theseus/third-party/xboot"]
+	path = theseus/third-party/xboot
+	url = https://github.com/austinbaccus/re-xbox-boot.git
+	ignore = untracked

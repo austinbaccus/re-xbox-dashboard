@@ -371,7 +371,7 @@ jobs:
           # Zip up; remove the *.o cruft from object subdirs first.
           find "${DROP}" -name '*.o' -delete
           find "${DROP}" -name '*.d' -delete
-          rm -rf "${DROP}/desktop" "${DROP}/shared" "${DROP}/engine" "${DROP}/render" "${DROP}/xbox" || true
+          rm -rf "${DROP}/desktop" "${DROP}/shared" "${DROP}/engine" "${DROP}/render" "${DROP}/xbox" "${DROP}/xboot" || true
           zip -r "${DROP}.zip" "${DROP}"
           echo "ARCHIVE=${DROP}.zip" >> "$GITHUB_ENV"
 

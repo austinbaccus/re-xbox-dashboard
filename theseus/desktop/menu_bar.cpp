@@ -452,6 +452,14 @@ void RenderMainMenuBar() {
                                   (wf & SDL_WINDOW_BORDERLESS) ? SDL_TRUE : SDL_FALSE);
         }
 
+        {
+            extern bool g_graphicsDebug;
+            if (ImGui::MenuItem("FPS / Debug Overlay", "F9", g_graphicsDebug)) {
+                g_graphicsDebug = !g_graphicsDebug;
+                bgfx::setDebug(g_graphicsDebug ? BGFX_DEBUG_PROFILER : BGFX_DEBUG_NONE);
+            }
+        }
+
         ImGui::Separator();
 
         if (ImGui::BeginMenu("Menu Bar")) {
@@ -624,7 +632,7 @@ void RenderSettingsWindow() {
             ImGui::SameLine();
             ImGui::TextDisabled("(?)");
             if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("Plays the original Xbox boot animation once on app startup\nbefore the dashboard initializes. Press Esc/Enter/Space to skip.");
+                ImGui::SetTooltip("Plays the original Xbox boot animation once on app startup\nbefore the dashboard initializes. Press Esc/Enter/Space or A/B/Start to skip.");
 
             ImGui::Spacing();
             if (ImGui::Button("Save All Settings"))
@@ -1325,6 +1333,7 @@ void RenderShortcutsWindow() {
         ImGui::Text("F4       Settings");
         ImGui::Text("F5       HDD Browser");
         ImGui::Text("F6       Playlist Maker");
+        ImGui::Text("F9       FPS / Debug Overlay");
         ImGui::Text("F10      Hide Menu Bar");
         ImGui::Text("F11      Toggle Fullscreen");
         ImGui::Text("F12      Toggle Borderless Window");

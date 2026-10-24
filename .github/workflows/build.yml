@@ -18,6 +18,75 @@ concurrency:
 # when authoring new shaders (offline by the contributor).
 
 jobs:
+  # The boot animation's shaders (theseus/desktop/shaders/xboot/) for D3D11,
+  # the renderer bgfx picks by default on Windows. shaderc hands HLSL to
+  # fxc, which only exists on Windows, so the Linux and macOS jobs cannot
+  # make these. This job builds shaderc, compiles them and checks them
+  # against the .bin files in Data/shaders/dx11/; when they differ the new
+  # ones are in the job's artifact (and in its log, base64) to commit.
+  shaders-dx11:
+    name: Shaders / D3D11
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout bgfx
+        id: bgfx
+        run: |
+          git submodule update --init --depth 1 theseus/third-party/bx theseus/third-party/bimg theseus/third-party/bgfx
+          echo "sha=$(git rev-parse HEAD:theseus/third-party/bgfx)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache shaderc
+        id: cache-shaderc
+        uses: actions/cache@v4
+        with:
+          path: theseus/third-party/bgfx/.build/win64_vs2022/bin/shadercRelease.exe
+          key: shaderc-win64-${{ steps.bgfx.outputs.sha }}
+
+      - uses: microsoft/setup-msbuild@v2
+        if: steps.cache-shaderc.outputs.cache-hit != 'true'
+
+      - name: Build shaderc
+        if: steps.cache-shaderc.outputs.cache-hit != 'true'
+        run: |
+          cd theseus/third-party/bgfx
+          ../bx/tools/bin/windows/genie.exe --with-tools vs2022
+          MSBuild.exe .build/projects/vs2022/shaderc.vcxproj -p:Configuration=Release -p:Platform=x64 -m -v:minimal
+
+      - name: Compile and compare
+        run: |
+          SHADERC=theseus/third-party/bgfx/.build/win64_vs2022/bin/shadercRelease.exe
+          SRC=theseus/desktop/shaders/xboot
+          OUT=out/dx11
+          mkdir -p "$OUT"
+          for SC in "$SRC"/vs_*.sc "$SRC"/fs_*.sc; do
+            NAME=$(basename "$SC" .sc)
+            case $NAME in vs_*) T=v ;; *) T=f ;; esac
+            "$SHADERC" -f "$SC" -o "$OUT/xboot_$NAME.bin" --type $T --platform windows --profile s_5_0 \
+              --varyingdef "$SRC/varying.def.sc" -i theseus/third-party/bgfx/src -i "$SRC"
+          done
+          STALE=0
+          for F in "$OUT"/*.bin; do
+            cmp -s "$F" "Data/shaders/dx11/$(basename "$F")" || { echo "differs: $(basename "$F")"; STALE=1; }
+          done
+          if [ $STALE = 1 ]; then
+            echo "Data/shaders/dx11 is out of date. Commit the job's artifact, or decode this:"
+            tar czf - -C "$OUT" . | base64 -w 0
+            echo
+            exit 1
+          fi
+
+      - name: Upload D3D11 shaders
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xboot-shaders-dx11
+          path: out/dx11/
+          if-no-files-found: ignore
+
   desktop-macos:
     name: Desktop / macOS
     runs-on: macos-latest
@@ -319,7 +388,7 @@ jobs:
           cp -R ~/builds/theseus/desktop-win64/. "$DROP/"
           find "$DROP" -name '*.o' -delete
           find "$DROP" -name '*.d' -delete
-          rm -rf "$DROP/desktop" "$DROP/shared" "$DROP/engine" "$DROP/render" "$DROP/xbox" || true
+          rm -rf "$DROP/desktop" "$DROP/shared" "$DROP/engine" "$DROP/render" "$DROP/xbox" "$DROP/xboot" || true
           ls -la "$DROP"
 
       - name: Upload Win64 build

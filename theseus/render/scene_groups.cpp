@@ -1384,12 +1384,29 @@ void CLayer::Render()
         fieldOfView = pViewpoint->m_fieldOfView;
 
         float aspect;
+#ifdef _XBOX
         if (TheseusGetEmulateXboxRes())
         {
             aspect = 720.0f/480.0f;
             if (TheseusGetStretchWidescreen())
                 aspect *= 1.25f;
         }
+#else
+        if (TheseusGetEmulateXboxRes())
+        {
+            // The 720x480 framing as authored, never stretched. A window
+            // wider than 3:2 (16:9, 21:9, 32:9) keeps the vertical field of
+            // view and sees more at the sides; a narrower one keeps the 3:2
+            // horizontal field and sees more above and below. The console
+            // keeps its fixed 3:2 (the TV does the stretching).
+            const float design = 720.0f/480.0f;
+            const float vw = TheseusGetViewWidth();
+            const float vh = TheseusGetViewHeight();
+            aspect = (vh > 0.0f && vw > 0.0f) ? (vw / vh) : design;
+            if (aspect < design)
+                fieldOfView = 2.0f * atanf(tanf(fieldOfView * 0.5f) * design / aspect);
+        }
+#endif
         else
         {
             // Real window aspect, so the scene fills the display instead of

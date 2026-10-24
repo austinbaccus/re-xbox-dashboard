@@ -59,7 +59,7 @@ struct BgfxFFUniforms {
 extern BgfxFFUniforms g_bgfxFF;
 extern bgfx::TextureHandle g_bgfxWhiteTex;
 
-// Fullscreen-quad blit program + sampler. Used by the boot anim, the media
+// Fullscreen-quad blit program + sampler. Used by the media
 // player, the xCloud stream, and CRT post. Owned in sdl_main.cpp.
 extern bgfx::ProgramHandle g_bgfxProgBlit;
 extern bgfx::UniformHandle g_bgfxSamplerBlit;
@@ -1005,7 +1005,7 @@ inline void CRT_EndAndBlit_Bgfx(float time, int width, int height) {
     bgfx::setViewRect(1, 0, 0, (uint16_t)width, (uint16_t)height);
     bgfx::setViewClear(1, 0); // backbuffer is fully overwritten by the quad
 
-    // Same fullscreen quad as boot_anim's blit. Layout has to match vs_blit's
+    // Same fullscreen quad as Bgfx_BlitTexturedQuad. Layout has to match vs_blit's
     // declared $input slots.
     bgfx::VertexLayout layout;
     layout.begin()
@@ -1016,7 +1016,7 @@ inline void CRT_EndAndBlit_Bgfx(float time, int width, int height) {
         .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
         .end();
 
-    // UV layout matches boot_anim's blit: bottom of the quad samples V=1,
+    // UV layout matches Bgfx_BlitTexturedQuad: bottom of the quad samples V=1,
     // top samples V=0. The offscreen FB written by view 0 follows the
     // active backend's render-target origin, so the top-of-screen pixel
     // sits at the top of the texture. Without this mapping the post-
