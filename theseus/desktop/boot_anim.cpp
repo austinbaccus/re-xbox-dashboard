@@ -255,6 +255,10 @@ private:
 	bgfx::TextureHandle dummy2d_ = BGFX_INVALID_HANDLE, dummyCube_ = BGFX_INVALID_HANDLE;
 	std::map<int, bgfx::FrameBufferHandle> fbs_;
 	uint16_t picW_ = 0, picH_ = 0;
+	// Horizontal scale of clip space for a picture wider than 4:3: the
+	// original's 4:3 projection times (4/3) / aspect, so a wider window
+	// sees more of the chamber at the sides instead of a stretched one.
+	float xs_ = 1.f;
 
 	bgfx::ProgramHandle prog_[K_COUNT];
 	bgfx::UniformHandle uC_, uK_, uBias_, uMisc_, uMode_, uApi_;
@@ -616,6 +620,19 @@ void BootRenderer::Submit(bgfx::ViewId view, const xb_draw& d, const float* para
 			for (uint32_t k = 0; k < run.count && run.base + k < (uint32_t)kConstants; k++)
 				std::memcpy(u.c[run.base + k], params + run.first + 4 * k, 4 * sizeof(float));
 	}
+	// Wider than 4:3 (Frame): narrow clip x of everything drawn in the
+	// picture's projection, the surface and the veil's target, by scaling
+	// the row of the constants that gives clip x. The veil and the quad
+	// into its target cover the screen as they are; the quad's disc and the
+	// chamber's depth in the target read clip x through c[114].x (Effects.md
+	// 3), which takes the inverse so the disc stays round.
+	if (xs_ != 1.f && (d.zeta == XB_SURF_SCREEN_DEPTH || d.zeta == XB_SURF_FX_DEPTH)) {
+		if (kind != K_VEIL && d.what != XB_DRAW_FX_QUAD) {
+			const int row = (kind == K_BLOB || kind == K_DROP) ? 4 : 0;
+			for (int i = 0; i < 4; i++) u.c[row][i] *= xs_;
+		}
+		if (kind == K_DEPTH) u.c[18][0] /= xs_;
+	}
 	// Parts at the ROM's quaternion 238 have NaN in their matrices until
 	// t = 1.17 (Chamber.md 6). In xemu they leave no depth
 	// (FrameOrder.md 4); not drawn here.
@@ -736,12 +753,19 @@ void BootRenderer::Submit(bgfx::ViewId view, const xb_draw& d, const float* para
 // Draws the frame of the core's last advance (renderer.js, draw).
 void BootRenderer::Frame(int winW, int winH)
 {
-	// The picture in 4:3 as large as the window holds, centred.
-	uint16_t picH = (uint16_t)winH, picW = (uint16_t)((winH * 4 + 1) / 3);
-	if (picW > winW) { picW = (uint16_t)winW; picH = (uint16_t)(winW * 3 / 4); }
+	// The picture fills a window of 4:3 or wider (16:9, 21:9, 32:9 see
+	// more of the chamber at the sides); a narrower one gets 4:3 as large as
+	// it holds, centred.
+	uint16_t picW = (uint16_t)winW, picH = (uint16_t)winH;
+	if ((uint32_t)winW * 3 < (uint32_t)winH * 4) picH = (uint16_t)(winW * 3 / 4);
 	const uint32_t maxTex = caps_->limits.maxTextureSize;
-	if (2u * picW > maxTex) { picW = (uint16_t)(maxTex / 2); picH = (uint16_t)(picW * 3 / 4); }
+	if (2u * picW > maxTex) {
+		picH = (uint16_t)((uint32_t)picH * (maxTex / 2) / picW);
+		picW = (uint16_t)(maxTex / 2);
+	}
 	if (picW < 4 || picH < 3) { picW = 640; picH = 480; }
+	xs_ = (4.f * picH) / (3.f * picW);
+	if (xs_ > 1.f) xs_ = 1.f;
 	Resize(picW, picH);
 
 	xb_frame_out fo;

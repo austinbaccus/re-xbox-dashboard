@@ -197,6 +197,7 @@ manipulation don't translate to a stick. Keyboard equivalents:
 | F4 | Settings |
 | F5 | Xbox HDD browser |
 | F6 | Playlist Maker |
+| F9 | FPS / debug overlay |
 | F10 | Toggle menu bar |
 | F11 | Toggle fullscreen |
 | Ctrl+M | Mute |

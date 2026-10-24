@@ -346,7 +346,9 @@ static void ApplyEffectiveMute()
 void ApplyEffectiveMute_Public() { ApplyEffectiveMute(); }
 bool g_startMinimized = false;
 bool g_graphicsDebug = false;
-extern double g_perfDrawMs, g_perfImguiMs, g_perfSwapMs, g_perfFrameMs, g_perfFps;
+extern double g_perfAdvanceMs, g_perfDrawMs, g_perfImguiMs, g_perfSwapMs, g_perfFrameMs, g_perfFps;
+extern float  g_perfHist[240];
+extern int    g_perfHistPos;
 float g_muteOverlayTimer = 0.0f; // seconds remaining to show the overlay toast
 
 // Instance lists for recreating GPU resources on device reset.
@@ -998,17 +1000,53 @@ static void PreSwapOverlays() {
     }
 
     if (g_graphicsDebug) {
+        extern int g_vsyncMode;
+        extern int g_msaaSamples;
+        extern int g_fpsCap;
+        const bgfx::Stats* st = bgfx::getStats();
+        double gpuMs = (st->gpuTimerFreq > 0 && st->gpuTimeEnd > st->gpuTimeBegin)
+            ? (double)(st->gpuTimeEnd - st->gpuTimeBegin) * 1000.0 / (double)st->gpuTimerFreq : 0.0;
+        double cpuMs = (st->cpuTimerFreq > 0 && st->cpuTimeEnd > st->cpuTimeBegin)
+            ? (double)(st->cpuTimeEnd - st->cpuTimeBegin) * 1000.0 / (double)st->cpuTimerFreq : 0.0;
+        double waitMs = (st->cpuTimerFreq > 0)
+            ? (double)(st->waitRender + st->waitSubmit) * 1000.0 / (double)st->cpuTimerFreq : 0.0;
+        int refresh = 0;
+        SDL_DisplayMode dm;
+        if (g_pSDLWindow && SDL_GetWindowDisplayMode(g_pSDLWindow, &dm) == 0) refresh = dm.refresh_rate;
+
         ImGuiWindowFlags fl = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
                               ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav;
         ImGui::SetNextWindowBgAlpha(0.6f);
         ImGui::SetNextWindowPos(ImVec2(8, 30), ImGuiCond_FirstUseEver);
         if (ImGui::Begin("##perf", nullptr, fl)) {
-            ImGui::Text("FPS:    %.1f", g_perfFps);
-            ImGui::Text("Frame:  %.2f ms", g_perfFrameMs);
+            ImGui::Text("FPS:     %.1f  (%.2f ms)", g_perfFps, g_perfFrameMs);
+            float hist[240];
+            float histMax = 0.0f;
+            for (int i = 0; i < 240; i++) {
+                hist[i] = g_perfHist[(g_perfHistPos + i) % 240];
+                if (hist[i] > histMax) histMax = hist[i];
+            }
+            ImGui::PlotLines("##frametimes", hist, 240, 0, nullptr, 0.0f,
+                             histMax > 33.4f ? histMax : 33.4f, ImVec2(240, 40));
             ImGui::Separator();
-            ImGui::Text("Draw:   %.2f ms", g_perfDrawMs);
-            ImGui::Text("ImGui:  %.2f ms", g_perfImguiMs);
-            ImGui::Text("Swap:   %.2f ms", g_perfSwapMs);
+            ImGui::Text("Update:  %.2f ms", g_perfAdvanceMs);
+            ImGui::Text("Draw:    %.2f ms", g_perfDrawMs);
+            ImGui::Text("ImGui:   %.2f ms", g_perfImguiMs);
+            ImGui::Text("Present: %.2f ms", g_perfSwapMs);
+            ImGui::Separator();
+            ImGui::Text("GPU:     %.2f ms", gpuMs);
+            ImGui::Text("Render thread: %.2f ms (wait %.2f)", cpuMs, waitMs);
+            ImGui::Text("Draw calls: %u   Views: %u", st->numDraw, (unsigned)st->numViews);
+            ImGui::Separator();
+            ImGui::Text("%s  %ux%u", bgfx::getRendererName(bgfx::getCaps()->rendererType),
+                        (unsigned)st->width, (unsigned)st->height);
+            ImGui::Text("Vsync %s  MSAA %dx  Cap %s  CRT %s",
+                        g_vsyncMode == 2 ? "off" : "on",
+                        g_msaaSamples > 1 ? g_msaaSamples : 1,
+                        g_fpsCap > 0 ? std::to_string(g_fpsCap).c_str() : "off",
+                        g_crt.enabled ? "on" : "off");
+            if (refresh > 0) ImGui::Text("Display: %d Hz", refresh);
+            ImGui::TextDisabled("F9 to hide");
         }
         ImGui::End();
     }
@@ -1049,12 +1087,18 @@ int  g_windowMode = 0;
 bool g_displayChangeRequested = false;
 
 // Per-pass timings populated each frame in the main loop. Read by the
-// --graphics-debug overlay. Single-frame ms; FPS is EMA-smoothed.
+// debug overlay (F9, or --graphics-debug to start with it open).
+// Single-frame ms; FPS is EMA-smoothed over the real frame interval, so it
+// counts event handling, Advance and any cap sleep, not just the draw.
+double g_perfAdvanceMs = 0.0;
 double g_perfDrawMs  = 0.0;
 double g_perfImguiMs = 0.0;
 double g_perfSwapMs  = 0.0;
 double g_perfFrameMs = 0.0;
 double g_perfFps     = 0.0;
+// Frame interval history for the overlay graph, oldest first from g_perfHistPos.
+float  g_perfHist[240] = {};
+int    g_perfHistPos = 0;
 
 // bgfx reset flags from g_vsyncMode + g_msaaSamples. bgfx has no adaptive
 // vsync, so only an explicit "off" (mode 2) disables it; the default and
@@ -1105,9 +1149,16 @@ void ApplyDisplayMode() {
     SDL_SetWindowFullscreen(g_pSDLWindow, 0);
 
     if (g_windowResolution > 0) {
-        // 16:9 width derived from vertical pixel count.
+        // Width from the vertical pixel count: 16:9 in a window, the
+        // display's own shape in exclusive fullscreen so an ultrawide
+        // (21:9, 32:9) monitor gets a mode that fills it.
         int h = g_windowResolution;
         int w = (h * 16) / 9;
+        SDL_DisplayMode desk;
+        int disp = SDL_GetWindowDisplayIndex(g_pSDLWindow);
+        if (g_windowMode == 2 && disp >= 0 && SDL_GetDesktopDisplayMode(disp, &desk) == 0 &&
+            desk.w > 0 && desk.h > 0)
+            w = (int)((long long)h * desk.w / desk.h) & ~1;
         SDL_SetWindowSize(g_pSDLWindow, w, h);
         SDL_SetWindowPosition(g_pSDLWindow, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
     }
@@ -1570,6 +1621,7 @@ int main(int argc, char* argv[]) {
                 // before the first frame. This can read low if the window
                 // isn't realised yet, which the per frame check above heals.
                 BgfxApplyReset();
+                if (g_graphicsDebug) bgfx::setDebug(BGFX_DEBUG_PROFILER);
                 fprintf(stdout, "bgfx backbuffer: %dx%d px (scale %.2f)\n",
                         initW, initH, Plat_GetDisplayScale());
 
@@ -2046,6 +2098,13 @@ int main(int argc, char* argv[]) {
                         else
                             Theseus_D3D_DumpTrace();
                     }
+                    if (event.key.keysym.sym == SDLK_F9) {
+                        // Debug overlay: FPS, frame graph, per-pass and GPU
+                        // timings. Same panel --graphics-debug opens.
+                        g_graphicsDebug = !g_graphicsDebug;
+                        if (g_graphicsDebug) bgfx::setDebug(BGFX_DEBUG_PROFILER);
+                        else                 bgfx::setDebug(BGFX_DEBUG_NONE);
+                    }
                     if (event.key.keysym.sym == SDLK_F10) {
                         g_showMenuBar = !g_showMenuBar;
                     }
@@ -2209,7 +2268,9 @@ int main(int argc, char* argv[]) {
             ApplyEffectiveMute();
         }
 
+        Uint64 tAdv0 = SDL_GetPerformanceCounter();
         if (!g_mediaFullscreen && !g_xcloudFullscreen) Advance();
+        g_perfAdvanceMs = (SDL_GetPerformanceCounter() - tAdv0) * 1000.0 / (double)perfFreq;
 
         // Same idea under bgfx: allocate / resize the offscreen FB to
         // window size, point view 0 at it so the scene draws there
@@ -2302,14 +2363,22 @@ int main(int argc, char* argv[]) {
         bgfx::frame();
         Uint64 tSwap1 = SDL_GetPerformanceCounter();
 
-        if (g_graphicsDebug) {
+        {
+            // Timed every frame (it's a few counter reads) so the overlay
+            // has real numbers the moment F9 opens it.
+            static Uint64 s_prevSwap1 = 0;
             double freq = (double)perfFreq;
             g_perfDrawMs  = (tDraw1 - tDraw0)   * 1000.0 / freq;
             g_perfImguiMs = (tImgui1 - tImgui0) * 1000.0 / freq;
             g_perfSwapMs  = (tSwap1 - tSwap0)   * 1000.0 / freq;
-            g_perfFrameMs = (tSwap1 - tDraw0)   * 1000.0 / freq;
-            double instFps = (g_perfFrameMs > 0.0) ? 1000.0 / g_perfFrameMs : 0.0;
-            g_perfFps = (g_perfFps == 0.0) ? instFps : 0.9 * g_perfFps + 0.1 * instFps;
+            if (s_prevSwap1) {
+                g_perfFrameMs = (tSwap1 - s_prevSwap1) * 1000.0 / freq;
+                double instFps = (g_perfFrameMs > 0.0) ? 1000.0 / g_perfFrameMs : 0.0;
+                g_perfFps = (g_perfFps == 0.0) ? instFps : 0.9 * g_perfFps + 0.1 * instFps;
+                g_perfHist[g_perfHistPos] = (float)g_perfFrameMs;
+                g_perfHistPos = (g_perfHistPos + 1) % 240;
+            }
+            s_prevSwap1 = tSwap1;
         }
 
         // (Old code re-applied Mix_Volume(-1, 0) every frame while muted.
