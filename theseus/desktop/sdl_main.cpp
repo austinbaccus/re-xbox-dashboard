@@ -1406,9 +1406,13 @@ int main(int argc, char* argv[]) {
         char logPath[1024];
         Plat_MkdirP(Plat_UserDataDir());
         snprintf(logPath, sizeof(logPath), "%s/theseus.log", Plat_UserDataDir());
-        if (freopen(logPath, "w", stdout)) {
+        // A GUI process has no fd behind stderr (_fileno gives -2), so it
+        // can't be _dup2'd onto. Truncate once, then reopen both streams in
+        // append mode so neither writes over the other.
+        if (freopen(logPath, "w", stdout) && freopen(logPath, "a", stdout)) {
             setvbuf(stdout, NULL, _IOLBF, 0);
-            _dup2(_fileno(stdout), _fileno(stderr));
+            if (freopen(logPath, "a", stderr))
+                setvbuf(stderr, NULL, _IONBF, 0);
         }
     }
 
