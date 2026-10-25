@@ -347,6 +347,7 @@ cd build && make desktop
 
 # Windows (MSYS2 / MinGW64)
 cd build && make desktop-win64
+~/builds/theseus/desktop-win64/Xbox.exe
 ```
 
 `make desktop` also builds the vendored projectM (MilkDrop visualizer) into a local prefix on first run. Only re-run the `shaders-bgfx*` Makefile targets if you edit a `.sc` shader source; the checked-in `.bin` files cover every backend.
