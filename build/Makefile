@@ -12,7 +12,7 @@
 #   make retail               Xbox retail XBE     -> xbox-retail/default.xbe
 #   make desktop              Native desktop      -> desktop/theseus
 #                             (macOS / Linux / MSYS2 Windows; auto-detected)
-#   make desktop-win64        Windows cross from  -> desktop-win64/theseus.exe
+#   make desktop-win64        Windows cross from  -> desktop-win64/Xbox.exe
 #                             macOS or Linux via mingw-w64
 #   make desktop-linux-arm64  Linux ARM64 cross   -> desktop-linux-arm64/theseus
 #                             from x86_64 Linux via aarch64-linux-gnu-g++
@@ -1081,8 +1081,9 @@ desktop-clean:
 # Override SDL2_MINGW_DIR if your layout differs.
 
 WIN64_DIR     = $(BUILDS_ROOT)/desktop-win64
-WIN64_TARGET  = $(WIN64_DIR)/theseus.exe
+WIN64_TARGET  = $(WIN64_DIR)/Xbox.exe
 WIN64_CXX     = x86_64-w64-mingw32-g++
+WIN64_WINDRES = x86_64-w64-mingw32-windres
 
 # libwinpthread-1.dll: still a runtime dep even with -static-libgcc/stdc++
 # because mingw-w64's posix thread model links winpthread dynamically.
@@ -1275,6 +1276,13 @@ $(WIN64_DIR)/xboot/%.o: $(XBOOT_ROOT)/core/src/%.c
 WIN64_DEPS = $(WIN64_OBJS:.o=.d)
 -include $(WIN64_DEPS)
 
+# Exe icon (art/logo3.ico) via build/xbox.rc. Kept out of WIN64_OBJS so
+# WIN64_DEPS doesn't look for a .d next to it.
+WIN64_RES = $(WIN64_DIR)/xbox_rc.o
+$(WIN64_RES): xbox.rc ../art/logo3.ico
+	@mkdir -p $(dir $@)
+	$(WIN64_WINDRES) -O coff -o $@ $<
+
 .PHONY: desktop-win64 desktop-win64-clean projectm-deps-win64 projectm-win64-clean
 
 desktop-win64: projectm-deps-win64 $(WIN64_TARGET)
@@ -1310,9 +1318,11 @@ $(PROJECTM_WIN64_MARKER):
 projectm-win64-clean:
 	rm -rf $(PROJECTM_SRC)/build-win64 $(PROJECTM_WIN64_PREFIX)
 
-$(WIN64_TARGET): $(WIN64_OBJS)
+$(WIN64_TARGET): $(WIN64_OBJS) $(WIN64_RES)
 	@mkdir -p $(WIN64_DIR)
-	$(WIN64_CXX) -o $@ $(WIN64_OBJS) $(WIN64_LDFLAGS)
+	$(WIN64_CXX) -o $@ $(WIN64_OBJS) $(WIN64_RES) $(WIN64_LDFLAGS)
+	@# The exe used to be theseus.exe; drop a stale one from older builds.
+	@rm -f $(WIN64_DIR)/theseus.exe
 	@# Bundle every DLL the exe needs so the build directory is a self-
 	@# contained Windows drop. -static-libgcc -static-libstdc++ folds the
 	@# core runtime in; SDL2 / SDL2_mixer / libmpv / libcurl / libwinpthread

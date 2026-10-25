@@ -1,0 +1,4 @@
+// Windows resources for the desktop-win64 build. Explorer shows the
+// first ICON in the exe as its file icon. Path is relative to build/,
+// where the Makefile runs windres.
+1 ICON "../art/logo3.ico"

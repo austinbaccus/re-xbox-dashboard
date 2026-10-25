@@ -373,9 +373,9 @@ jobs:
 
       - name: Verify
         run: |
-          file ~/builds/theseus/desktop-win64/theseus.exe
+          file ~/builds/theseus/desktop-win64/Xbox.exe
           # Prove xCloud actually linked in rather than trusting the exit code.
-          x86_64-w64-mingw32-nm -C ~/builds/theseus/desktop-win64/theseus.exe \
+          x86_64-w64-mingw32-nm -C ~/builds/theseus/desktop-win64/Xbox.exe \
             | grep -q 'rtc::PeerConnection' \
             || { echo "xCloud/WebRTC missing from the Windows binary"; exit 1; }
 
