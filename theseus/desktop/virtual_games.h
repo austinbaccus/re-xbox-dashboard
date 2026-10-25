@@ -221,11 +221,14 @@ inline void VGames_DeleteByName(const char* name) {
 // Match a disk path like "Library/Games/Road Rage" to a game index, or -1.
 inline int VGames_MatchFolder(const char* localPath) {
     VGames_Load();
+    // Callers hand us forward slashes, but on Windows the prefix comes from
+    // %APPDATA% with backslashes, so fold both sides to '/'.
     char norm[512];
     int j = 0;
     for (int k = 0; localPath[k] && j < 510; k++) {
-        if (localPath[k] == '/' && j > 0 && norm[j-1] == '/') continue;
-        norm[j++] = localPath[k];
+        char c = (localPath[k] == '\\') ? '/' : localPath[k];
+        if (c == '/' && j > 0 && norm[j-1] == '/') continue;
+        norm[j++] = c;
     }
     if (j > 0 && norm[j-1] == '/') j--;
     norm[j] = 0;
@@ -240,6 +243,7 @@ inline int VGames_MatchFolder(const char* localPath) {
         char expected[512];
         snprintf(expected, sizeof(expected), "%s/%s/%s",
                  prefix, g_vgames.games[i].category, g_vgames.games[i].name);
+        for (char* p = expected; *p; p++) if (*p == '\\') *p = '/';
         if (strcasecmp(norm, expected) == 0)
             return i;
     }

@@ -69,6 +69,11 @@ inline bool XboxFS_IsVirtualTree(const char* p) {
 }
 
 inline bool XboxFS_IsHostPath(const char* p) {
+    // "\Device\Harddisk0\PartitionN\..." is what launch() hands us. It has
+    // no drive letter, so without this it reads as a real Windows path and
+    // never reaches the partition remap below.
+    if (strncmp(p, "\\Device\\", 8) == 0) return false;
+
     // Already resolved through AppPath, so never translate it twice.
     const char* roots[2] = { Plat_ShippedDir(), Plat_UserDataDir() };
     for (int i = 0; i < 2; i++) {
